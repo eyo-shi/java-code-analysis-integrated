@@ -1,0 +1,127 @@
+name: Java Code Analysis with Neo4j
+description: |
+  Launch Neo4j on Kubernetes and ingest a Spring MVC + MyBatis
+  business-to-database graph from a target Java repository. Both Neo4j and the
+  analysis pipeline run in the same CML Project (same Kubernetes namespace),
+  so the Internal Bolt URI resolves without any cross-namespace networking.
+
+  After deploy, wait for the Neo4j Launcher Application to reach Running,
+  then copy the Internal Bolt URI and password from its Application Log into
+  Project Settings > Advanced > Environment Variables (NEO4J_URI, NEO4J_PASSWORD),
+  and manually run the "Analyze and Ingest" job.
+
+author: Cloudera Inc.
+specification_version: 1.0
+prototype_version: 1.0
+date: "2026-09-10"
+
+# Non-empty defaults required so keys appear in Project Settings after deploy.
+# Install Dependencies job also seeds placeholders via cmlbootstrap.
+environment_variables:
+  # --- neo4j-launcher variables ---
+  NEO4J_USERNAME:
+    default: "neo4j"
+    description: "Neo4j username."
+    required: false
+  NEO4J_PASSWORD:
+    description: "Neo4j password. When unset, the built-in default Neo4jPass1234 is used."
+    required: false
+  NEO4J_ACCEPT_LICENSE_AGREEMENT:
+    default: "yes"
+    description: "Must be 'yes' for Neo4j Docker images to start (license acceptance)."
+    required: false
+  NEO4J_SERVICE_TYPE:
+    default: "LoadBalancer"
+    description: "Kubernetes Service type (LoadBalancer, NodePort, or ClusterIP)."
+    required: false
+  NEO4J_NODE_PORT_BOLT:
+    description: "NodePort for Bolt protocol (used when NEO4J_SERVICE_TYPE=NodePort)."
+    required: false
+  NEO4J_NODE_PORT_HTTP:
+    description: "NodePort for HTTP/Browser (used when NEO4J_SERVICE_TYPE=NodePort)."
+    required: false
+  NEO4J_PLUGINS:
+    default: "[]"
+    description: 'Neo4j plugins JSON array. Example: ["apoc"] or ["apoc","graph-data-science"]. Empty [] is most reliable on first boot.'
+    required: false
+  NEO4J_MEMORY:
+    default: "4Gi"
+    description: "Memory limit for the Neo4j Pod (not the CML Application memory). Examples: 4Gi, 4G, 4096Mi."
+    required: false
+  NEO4J_USE_PVC:
+    default: "false"
+    description: "Persist Neo4j data on the project PVC. Set false to use ephemeral storage for troubleshooting."
+    required: false
+
+  # --- java-code-analysis variables ---
+  GIT_REPO_URL:
+    default: "https://github.com/terasolunaorg/terasoluna-tourreservation-mybatis3"
+    description: "Git repository URL to clone. Required unless SOURCE_PATH is set."
+  GIT_REF:
+    default: "release/5.7.1.SP1.RELEASE"
+    description: "Git branch or tag to clone."
+  NEO4J_URI:
+    default: "bolt://cml-neo4j-REPLACE_FROM_APPLICATION_LOG.mlx-user-0:7687"
+    description: |
+      Internal Bolt URI copied from the co-located Neo4j Launcher Application
+      Log after this AMP starts Neo4j. Because Neo4j runs in the same Project
+      namespace as the Analyze and Ingest job, the Internal Bolt URI
+      (bolt://cml-neo4j-<hash>.mlx-user-<id>:7687) resolves directly.
+  CLONE_DIR:
+    default: "/tmp/source"
+    description: "Directory to clone the source repository into."
+  SOURCE_PATH:
+    default: "-"
+    description: "Set to a local path to skip git clone, or leave as '-'."
+  PROJECT_ID:
+    default: "-"
+    description: "Neo4j project id, or '-' to derive from the repository name."
+  PROJECT_NAME:
+    default: "-"
+    description: "Display name on the Project node, or '-' to derive automatically."
+  EXCLUDE_DIRS:
+    default: ".git,target,node_modules,venv,.venv,dist,build,__pycache__,.m2"
+    description: "Comma-separated directory names to exclude from analysis."
+
+runtimes:
+  - editor: PBJ Workbench
+    kernel: Python 3.10
+    edition: Standard
+
+tasks:
+  # 1. Install combined dependencies + seed project env vars.
+  - type: run_session
+    name: Install Dependencies
+    script: 0_session-install-dependencies/install-dependencies.py
+    short_summary: Install combined dependencies and seed project env vars.
+    kernel: python3
+    cpu: 2
+    memory: 8
+
+  # 2. Start Neo4j as a CML Application (long-running).
+  - type: start_application
+    name: Neo4j Launcher
+    script: 1_start-neo4j/start_neo4j.py
+    short_summary: Launch Neo4j on Kubernetes and expose it externally.
+    subdomain: neo4j-launcher
+    kernel: python3
+    cpu: 2
+    memory: 8
+
+  # 3. Only create the ingest Job (user runs it manually once Neo4j is Running
+  #    and Internal Bolt URI / password are set in Project Settings).
+  - type: create_job
+    name: Analyze and Ingest
+    entity_label: analyze_and_ingest
+    script: 2_session-analyze-ingest/analyze_ingest.py
+    short_summary: Clone source, analyze Java code, and ingest graph into Neo4j.
+    long_summary: >-
+      Manual run. Wait until the Neo4j Launcher Application is Running, copy
+      the Internal Bolt URI and password from its Application Log into
+      Project Settings > Advanced > Environment Variables (NEO4J_URI /
+      NEO4J_PASSWORD), then run this job.
+    kernel: python3
+    cpu: 2
+    memory: 4
+    environment:
+      TASK_TYPE: CREATE/RUN_JOB
