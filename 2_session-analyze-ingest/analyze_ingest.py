@@ -25,6 +25,7 @@ if str(ROOT) not in sys.path:
 
 from code_analysis.config import Config
 from code_analysis.graph_builder import build_graph
+from code_analysis.infer_business_graph import load_label_overrides
 from code_analysis.neo4j_loader import Neo4jLoader
 from code_analysis.source_fetcher import resolve_source_path
 
@@ -59,6 +60,8 @@ def main() -> None:
     loader = Neo4jLoader(config.neo4j_uri, config.neo4j_username, config.neo4j_password)
     try:
         loader.ingest(graph)
+        label_overrides = load_label_overrides(config.business_labels_file)
+        loader.infer_business_graph(config.project_id, label_overrides=label_overrides)
     finally:
         loader.close()
 

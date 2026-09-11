@@ -67,6 +67,7 @@ Project Settings → Advanced → Environment Variables で設定します (`.pr
 | `PROJECT_ID` | `-` | Neo4j 再投入キー (未指定ならリポ名から生成) |
 | `PROJECT_NAME` | `-` | 表示名 (未指定ならリポ名から生成) |
 | `EXCLUDE_DIRS` | `.git,target,...` | walk 対象外ディレクトリ |
+| `BUSINESS_LABELS_FILE` | `-` (未指定) | Service パッケージ名 → 日本語業務名の JSON。未指定なら組み込みデフォルト (terasoluna 用) |
 
 ## グラフノード
 
@@ -81,7 +82,9 @@ Project Settings → Advanced → Environment Variables で設定します (`.pr
 | `Condition` / `BusinessRule` | バリデーション | `*Form.java` + `*Validator.java` |
 | `DesignDocument` / `Evidence` | ドキュメント・根拠 | README 等 |
 
-主要リレーション: `HAS_SCREEN`, `IMPLEMENTED_BY`, `HAS_FIELD`, `BINDS_TO`, `VALIDATES`, `CHECKS`, `WRITES`, `INSERTS`/`UPDATES`/`DELETES`/`SELECTS`, `CONTAINS`, `HAS_COLUMN`。
+主要リレーション: `HAS_SCREEN`, `IMPLEMENTED_BY`, `HAS_FIELD`, `BINDS_TO`, `VALIDATES`, `CHECKS`, `WRITES`, `INSERTS`/`UPDATES`/`DELETES`/`SELECTS`, `CONTAINS`, `HAS_COLUMN`, `HAS_OPERATION`, `INCLUDES_METHOD`。
+
+`HAS_OPERATION` / `INCLUDES_METHOD` は ingest 後の推測フェーズ (`code_analysis/infer_business_graph.py`) が Service パッケージ (`domain.service.<pkg>.*`) 単位で追加する `Business` (`extraction='inferred'`) と Service クラス / メソッドを繋ぐエッジで、Analyzer が Controller→Service の `CALLS` を復元しきれないケースでも「テーブル → 業務」クエリが辿れるようにしています。
 
 ## 分析クエリ例
 
@@ -117,7 +120,23 @@ RETURN s.name AS screen, db.logical_name AS database, t.name AS table,
 ORDER BY screen, database, table
 ```
 
-### ③ 同一カラムを更新する画面間のバリデーション差分
+### ③ 指定テーブルを書き込む業務 (Service パッケージ推測経由)
+
+Controller→Service の `CALLS` エッジが解析できないプロジェクトでも、`infer_business_graph` が張った `Business -[:INCLUDES_METHOD]-> JavaMethod` 経由でテーブル書き込みの主体業務を特定できます。
+
+```cypher
+MATCH (t:Table {name: $tableName})<-[r:INSERTS|UPDATES|DELETES]-(sql:SQL)
+MATCH (sql)<-[:EXECUTES]-(mapper:JavaMethod)
+MATCH (svc:JavaMethod {layer: 'service'})-[:CALLS*0..5]->(mapper)
+MATCH (b:Business)-[:INCLUDES_METHOD]->(svc)
+RETURN DISTINCT b.name AS business, type(r) AS operation,
+       collect(DISTINCT svc.method_name) AS methods
+ORDER BY business, operation
+```
+
+例: `$tableName = 'RESERVE'` で `予約業務` の `update` が返る (terasoluna-tourreservation)。
+
+### ④ 同一カラムを更新する画面間のバリデーション差分
 
 ```cypher
 MATCH (s:Screen {project_id: $projectId})-[:VALIDATES]->(cond:Condition)
@@ -138,7 +157,7 @@ ORDER BY table, column
 0_session-install-dependencies/  # 依存 (kubernetes / neo4j / cmlbootstrap) + project env seed
 1_start-neo4j/                    # Neo4j を CML Application として起動
 2_session-analyze-ingest/         # 解析 + ingest エントリポイント
-code_analysis/                    # 解析パイプライン (parsers / models / neo4j_loader)
+code_analysis/                    # 解析パイプライン (parsers / models / neo4j_loader / infer_business_graph)
 utils/                            # neo4j-launcher 共通ユーティリティ
 tests/                            # unittest
 ```

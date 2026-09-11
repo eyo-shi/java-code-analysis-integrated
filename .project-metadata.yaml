@@ -83,6 +83,14 @@ environment_variables:
   EXCLUDE_DIRS:
     default: ".git,target,node_modules,venv,.venv,dist,build,__pycache__,.m2"
     description: "Comma-separated directory names to exclude from analysis."
+  BUSINESS_LABELS_FILE:
+    default: "-"
+    description: |
+      (任意) Service パッケージ名 → 日本語業務名の JSON マッピングファイル。
+      例: {"reserve": "予約業務", "customer": "顧客管理業務"}
+      未指定 ('-') なら code_analysis/infer_business_graph.py の組み込みデフォルト
+      (terasoluna-tourreservation 用) を使用。
+    required: false
 
 runtimes:
   - editor: PBJ Workbench

@@ -63,6 +63,66 @@ class Neo4jLoader:
         if self._driver is not None:
             self._driver.close()
 
+    def infer_business_graph(
+        self,
+        project_id: str,
+        label_overrides: dict[str, str] | None = None,
+    ) -> None:
+        """Post-processing: derive Business nodes from Service packages.
+
+        Adds a ``business:<svc_package>`` namespace on top of the Controller-
+        derived Business nodes so "which business updates table X" queries can
+        skip the analyzer's missing Controller->Service ``CALLS`` edge. Safe to
+        call after every ``ingest()`` re-run — the pre-ingest ``_delete_project``
+        wipes the inferred nodes too, and the Cypher snippets are idempotent.
+
+        Errors are logged and swallowed: business-graph inference is a
+        best-effort convenience and must not fail the whole ingest job.
+        """
+        from code_analysis.infer_business_graph import (
+            CYPHER_CLEANUP_RESERVED,
+            CYPHER_CREATE_BUSINESSES,
+            CYPHER_LINK_METHODS,
+            DEFAULT_DTO_SUFFIXES,
+            JAVA_RESERVED_METHOD_NAMES,
+            resolve_labels,
+        )
+
+        if self._driver is None:
+            self.verify_connectivity()
+        assert self._driver is not None
+        labels = resolve_labels(label_overrides)
+        reserved = list(JAVA_RESERVED_METHOD_NAMES)
+        dto = list(DEFAULT_DTO_SUFFIXES)
+
+        try:
+            with self._driver.session() as session:
+                session.execute_write(
+                    lambda tx: tx.run(
+                        CYPHER_CLEANUP_RESERVED,
+                        project_id=project_id,
+                        reserved_words=reserved,
+                    ).consume()
+                )
+                session.execute_write(
+                    lambda tx: tx.run(
+                        CYPHER_CREATE_BUSINESSES,
+                        project_id=project_id,
+                        dto_suffixes=dto,
+                        labels=labels,
+                    ).consume()
+                )
+                session.execute_write(
+                    lambda tx: tx.run(
+                        CYPHER_LINK_METHODS,
+                        project_id=project_id,
+                        reserved_words=reserved,
+                    ).consume()
+                )
+            print("Inferred Business graph populated (from Service packages).")
+        except Exception as exc:
+            print(f"Warning: business-graph inference failed: {exc}")
+
     def ingest(self, graph: AnalysisGraph) -> None:
         self.verify_connectivity()
         assert self._driver is not None

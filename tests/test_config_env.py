@@ -32,8 +32,9 @@ class ConfigEnvResolutionTests(unittest.TestCase):
                 os.environ[key] = value
 
     def test_managed_env_vars_are_documented(self) -> None:
-        self.assertEqual(len(MANAGED_ENV_VARS), 10)
+        self.assertEqual(len(MANAGED_ENV_VARS), 11)
         self.assertIn("NEO4J_URI", MANAGED_ENV_VARS)
+        self.assertIn("BUSINESS_LABELS_FILE", MANAGED_ENV_VARS)
 
     def test_reads_from_os_environ(self) -> None:
         os.environ["NEO4J_URI"] = "bolt://neo4j.example:7687"

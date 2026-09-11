@@ -21,6 +21,7 @@ MANAGED_ENV_VARS: tuple[str, ...] = (
     "PROJECT_ID",
     "PROJECT_NAME",
     "EXCLUDE_DIRS",
+    "BUSINESS_LABELS_FILE",
 )
 
 SENSITIVE_ENV_VARS: frozenset[str] = frozenset({"NEO4J_PASSWORD"})
@@ -42,6 +43,7 @@ PROJECT_ENV_SEEDS: dict[str, str] = {
     "PROJECT_ID": "-",
     "PROJECT_NAME": "-",
     "EXCLUDE_DIRS": ".git,target,node_modules,venv,.venv,dist,build,__pycache__,.m2",
+    "BUSINESS_LABELS_FILE": "-",
 }
 
 # Local-dev fallbacks; aligned with PROJECT_ENV_SEEDS / .project-metadata.yaml.
@@ -292,6 +294,7 @@ class Config:
     project_id: str
     project_name: str
     exclude_dirs: tuple[str, ...]
+    business_labels_file: str | None
 
     @classmethod
     def from_env(cls) -> Config:
@@ -341,6 +344,9 @@ class Config:
                     or ".git,target,node_modules,venv,.venv,dist,build,__pycache__,.m2"
                 ).split(",")
                 if part.strip()
+            ),
+            business_labels_file=_optional_env_value(
+                "BUSINESS_LABELS_FILE", _env("BUSINESS_LABELS_FILE")
             ),
         )
 
