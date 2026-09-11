@@ -36,7 +36,7 @@ PROJECT_ENV_SEEDS: dict[str, str] = {
     "GIT_REF": "release/5.7.1.SP1.RELEASE",
     "NEO4J_URI": "bolt://cml-neo4j-REPLACE_FROM_APPLICATION_LOG.mlx-user-0:7687",
     "NEO4J_USERNAME": "neo4j",
-    "NEO4J_PASSWORD": "REPLACE_FROM_NEO4J_LAUNCHER",
+    "NEO4J_PASSWORD": "Neo4jPass1234",
     "CLONE_DIR": "/tmp/source",
     "SOURCE_PATH": "-",
     "PROJECT_ID": "-",
@@ -346,10 +346,20 @@ class Config:
 
     def validate_for_ingest(self) -> None:
         validate_neo4j_uri_for_ingest(self.neo4j_uri)
-        if self.neo4j_password.strip() in {"", "REPLACE_FROM_NEO4J_LAUNCHER"}:
+        password = self.neo4j_password.strip()
+        if password == "":
             raise ValueError(
-                "NEO4J_PASSWORD is not set. Copy the password from neo4j-launcher "
-                "startup into Project Settings > Advanced > Environment Variables."
+                "NEO4J_PASSWORD is empty. Set it in Project Settings > Advanced > "
+                "Environment Variables (built-in default: Neo4jPass1234)."
+            )
+        if password == "REPLACE_FROM_NEO4J_LAUNCHER":
+            # Legacy placeholder from an earlier version of this AMP. Existing
+            # deploys may still carry this string in the project environment;
+            # surface a clear error rather than trying to authenticate with it.
+            raise ValueError(
+                "NEO4J_PASSWORD is still the old placeholder from a prior deploy. "
+                "Update it in Project Settings > Advanced > Environment Variables "
+                "(the built-in default is now Neo4jPass1234)."
             )
         if not self.source_path and not self.git_repo_url:
             raise ValueError("GIT_REPO_URL is required when SOURCE_PATH is not set")
