@@ -80,13 +80,26 @@ def iter_neo4j_connection_uris(
         add(internal_uri)
 
     if host and _is_cml_internal_neo4j_host(host):
+        # Emit every K8s DNS variant the analyze pod's resolver might accept.
+        # Mirrors the launcher's own `_bolt_host_candidates` in
+        # utils/neo4j_utils.py: different pod resolver configs resolve
+        # different forms, so try all three:
+        #   1. The URI as configured (typically `<svc>.<ns>` from the log)
+        #   2. Fully-qualified name (`<svc>.<ns>.svc.cluster.local`) — works
+        #      from any pod when standard cluster DNS is in effect
+        #   3. Bare service name (`<svc>`) — resolves only in the same
+        #      namespace as the Service, but survives search-domain-only
+        #      resolvers
         add_host(scheme, host)
-        # Fallback: the bare Kubernetes Service name inside the same project.
-        # Helps when the pod-hash portion of the Internal Bolt URI is stale
-        # (neo4j-launcher restarted since the URI was copied) but the Service
-        # itself is still reachable. Only useful if this AMP shares a namespace
-        # with neo4j-launcher; cross-AMP callers must use the External Bolt URL.
-        add_host("bolt", "neo4j-launcher")
+
+        parts = host.split(".")
+        service = parts[0]
+        if len(parts) >= 2 and not host.endswith(".svc.cluster.local"):
+            namespace = parts[1]
+            add_host(scheme, f"{service}.{namespace}.svc.cluster.local")
+        if service and service != host:
+            add_host(scheme, service)
+
         return ordered
 
     if host and _is_browser_neo4j_host(host):

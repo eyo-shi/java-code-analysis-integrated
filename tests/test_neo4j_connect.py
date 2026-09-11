@@ -18,18 +18,34 @@ class Neo4jConnectTests(unittest.TestCase):
         if self._saved_internal is not None:
             os.environ["NEO4J_INTERNAL_URI"] = self._saved_internal
 
-    def test_cml_internal_uri_is_tried_first_with_service_fallback(self) -> None:
+    def test_cml_internal_uri_emits_all_dns_variants(self) -> None:
         uri = "bolt://cml-neo4j-10xfi5ukxwfadjsr.mlx-user-98:7687"
         self.assertEqual(
             iter_neo4j_connection_uris(uri),
-            [uri, "bolt://neo4j-launcher:7687"],
+            [
+                uri,
+                "bolt://cml-neo4j-10xfi5ukxwfadjsr.mlx-user-98.svc.cluster.local:7687",
+                "bolt://cml-neo4j-10xfi5ukxwfadjsr:7687",
+            ],
         )
 
-    def test_cml_internal_uri_fallback_preserves_port(self) -> None:
+    def test_cml_internal_uri_variants_preserve_port(self) -> None:
         uri = "bolt://cml-neo4j-abc.mlx-user-0:17687"
         self.assertEqual(
             iter_neo4j_connection_uris(uri),
-            [uri, "bolt://neo4j-launcher:17687"],
+            [
+                uri,
+                "bolt://cml-neo4j-abc.mlx-user-0.svc.cluster.local:17687",
+                "bolt://cml-neo4j-abc:17687",
+            ],
+        )
+
+    def test_cml_internal_fqdn_input_is_not_reexpanded(self) -> None:
+        """FQDN input still emits a bare-service fallback but no duplicate FQDN."""
+        uri = "bolt://cml-neo4j-abc.mlx-user-98.svc.cluster.local:7687"
+        self.assertEqual(
+            iter_neo4j_connection_uris(uri),
+            [uri, "bolt://cml-neo4j-abc:7687"],
         )
 
     def test_cml_internal_uri_after_internal_override(self) -> None:
@@ -40,7 +56,8 @@ class Neo4jConnectTests(unittest.TestCase):
             [
                 "bolt://cml-neo4j-override.mlx-user-1:7687",
                 uri,
-                "bolt://neo4j-launcher:7687",
+                "bolt://cml-neo4j-10xfi5ukxwfadjsr.mlx-user-98.svc.cluster.local:7687",
+                "bolt://cml-neo4j-10xfi5ukxwfadjsr:7687",
             ],
         )
 
