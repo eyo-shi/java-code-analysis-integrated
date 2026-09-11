@@ -24,7 +24,8 @@ environment_variables:
     description: "Neo4j username."
     required: false
   NEO4J_PASSWORD:
-    description: "Neo4j password. When unset, the built-in default Neo4jPass1234 is used."
+    default: "Neo4jPass1234"
+    description: "Neo4j password. Built-in default: Neo4jPass1234. 本番運用時は必ず変更してください。"
     required: false
   NEO4J_ACCEPT_LICENSE_AGREEMENT:
     default: "yes"
